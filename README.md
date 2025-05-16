@@ -2,6 +2,9 @@
 
 <div align="center">
   <img src="icon.png" alt="Prompt Launcher 图标" width="200">
+</div>
+
+<div align="center">
   <img src="https://github.com/jiachenwei/PromptLauncher/actions/workflows/build.yml/badge.svg" alt="GitHub Actions 状态">
 </div>
 
