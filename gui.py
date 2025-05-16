@@ -61,9 +61,9 @@ class PromptWindow(QWidget):
             Qt.WindowType.WindowCloseButtonHint |
             Qt.WindowType.WindowStaysOnTopHint
         )
-        # 默认尺寸
-        self.resize(600, 450)
-        self.setMinimumSize(350, 250)
+        # 默认尺寸，设置得更宽松一些
+        self.resize(700, 550)
+        self.setMinimumSize(400, 300)
 
         # 如果存在配置文件，恢复上次保存的尺寸
         if os.path.exists(self._cfg_path):
@@ -79,9 +79,10 @@ class PromptWindow(QWidget):
 
         # 主布局
         layout = QVBoxLayout(self)
-        layout.setContentsMargins(12, 12, 12, 12)
-        layout.setSpacing(10)
-        default_font = QFont("Segoe UI", 11)
+        layout.setContentsMargins(5, 5, 5, 5)     # 边距调大
+        layout.setSpacing(5)                        # 间距调大
+        default_font = QFont("Microsoft YaHei", 12)         # 字体稍微调大
+
         self.setFont(default_font)
 
         # 搜索框
@@ -89,6 +90,7 @@ class PromptWindow(QWidget):
         self.search.setFont(default_font)
         self.search.textChanged.connect(self.filter_current_tab)
         self.search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
+        self.search.setContentsMargins(0, 0, 0, 5)
         layout.addWidget(self.search)
 
         # 标签页
@@ -104,34 +106,36 @@ class PromptWindow(QWidget):
         for lst in self.tab_lists.values():
             lst.installEventFilter(self)
 
-        # 按钮：新建、删除分组、上一页、下一页
-        btn_new = QPushButton("＋")
-        btn_new.setFixedSize(20, 20)
-        btn_new.clicked.connect(self.add_group)
-        btn_del = QPushButton("－")
-        btn_del.setFixedSize(20, 20)
-        btn_del.clicked.connect(self.delete_group)
-        btn_prev = QPushButton("<")
-        btn_prev.setFixedSize(20, 20)
-        btn_prev.clicked.connect(self.prev_tab)
-        btn_next = QPushButton(">")
-        btn_next.setFixedSize(20, 20)
-        btn_next.clicked.connect(self.next_tab)
-
-        corner = QWidget()
-        corner_layout = QHBoxLayout(corner)
-        corner_layout.setContentsMargins(0, 0, 0, 0)
-        corner_layout.setSpacing(2)
-        corner_layout.addWidget(btn_new)
-        corner_layout.addWidget(btn_del)
-        corner_layout.addWidget(btn_prev)
-        corner_layout.addWidget(btn_next)
-        self.tabs.setCornerWidget(corner, Qt.Corner.TopRightCorner)
-
-        # 双击标签重命名
-        self.tabs.tabBar().tabBarDoubleClicked.connect(self.rename_group)
-
         layout.addWidget(self.tabs)
+
+        # 支持双击标签页重命名
+        tab_bar = self.tabs.tabBar()
+        tab_bar.installEventFilter(self)
+
+        # 底部按钮：新建、删除分组、上一页、下一页
+        btn_new = QPushButton("＋")
+        btn_del = QPushButton("－")
+        btn_prev = QPushButton("<")
+        btn_next = QPushButton(">")
+        for btn, slot in [
+            (btn_new, self.add_group),
+            (btn_del, self.delete_group),
+            (btn_prev, self.prev_tab),
+            (btn_next, self.next_tab)
+        ]:
+            btn.setFixedSize(30, 30)
+            btn.clicked.connect(slot)
+
+        bottom_widget = QWidget()
+        bottom_layout = QHBoxLayout(bottom_widget)
+        bottom_layout.setContentsMargins(0, 0, 0, 0)
+        bottom_layout.setSpacing(10)
+        bottom_layout.addStretch()
+        bottom_layout.addWidget(btn_new)
+        bottom_layout.addWidget(btn_del)
+        bottom_layout.addWidget(btn_prev)
+        bottom_layout.addWidget(btn_next)
+        layout.addWidget(bottom_widget)
 
     def _add_group_tab(self, group_name: str):
         alias_map = self.prompt_dict.get(group_name, {})
@@ -161,7 +165,7 @@ class PromptWindow(QWidget):
 
         alias_label = QLabel(alias)
         alias_font = QFont(self.font())
-        alias_font.setBold(True)
+        # alias_font.setBold(True)
         alias_label.setFont(alias_font)
 
         # 名称和计数水平布局，计数靠右
@@ -184,14 +188,25 @@ class PromptWindow(QWidget):
         lst.setItemWidget(item, widget)
 
     def add_group(self):
-        name, ok = QInputDialog.getText(self, "新建分组", "分组名称:")
-        name = name.strip()
-        if ok and name and name not in self.prompt_dict:
-            self.prompt_dict[name] = {}
-            self.usage_counts[name] = {}
-            self._save()
-            self._add_group_tab(name)
-            self.tabs.setCurrentIndex(self.tabs.count() - 1)
+        # 循环弹窗，直到有效输入或取消
+        while True:
+            name, ok = QInputDialog.getText(self, "新建分组", "分组名称:")
+            if not ok:
+                return
+            name = name.strip()
+            if not name:
+                QMessageBox.warning(self, "新建分组", "分组名称不能为空")
+                continue
+            if name in self.prompt_dict:
+                QMessageBox.warning(self, "新建分组", f"分组“{name}”已存在")
+                continue
+            break
+        # 无重名，执行创建
+        self.prompt_dict[name] = {}
+        self.usage_counts[name] = {}
+        self._save()
+        self._add_group_tab(name)
+        self.tabs.setCurrentIndex(self.tabs.count() - 1)
 
     def delete_group(self):
         idx = self.tabs.currentIndex()
@@ -215,14 +230,27 @@ class PromptWindow(QWidget):
         if index < 0:
             return
         old_name = self.tabs.tabText(index)
-        new_name, ok = QInputDialog.getText(self, "重命名分组", "新名称:", text=old_name)
-        new_name = new_name.strip()
-        if ok and new_name and new_name not in self.prompt_dict and new_name != old_name:
-            self.prompt_dict[new_name] = self.prompt_dict.pop(old_name)
-            self.usage_counts[new_name] = self.usage_counts.pop(old_name)
-            self._save()
-            self.tabs.setTabText(index, new_name)
-            self.tab_lists[new_name] = self.tab_lists.pop(old_name)
+        # 循环弹窗，直到有效输入或取消
+        while True:
+            new_name, ok = QInputDialog.getText(self, "重命名分组", "新名称:", text=old_name)
+            if not ok:
+                return
+            new_name = new_name.strip()
+            if not new_name:
+                QMessageBox.warning(self, "重命名分组", "新名称不能为空")
+                continue
+            if new_name == old_name:
+                return
+            if new_name in self.prompt_dict:
+                QMessageBox.warning(self, "重命名分组", f"分组“{new_name}”已存在")
+                continue
+            break
+        # 无重名，执行重命名
+        self.prompt_dict[new_name] = self.prompt_dict.pop(old_name)
+        self.usage_counts[new_name] = self.usage_counts.pop(old_name)
+        self._save()
+        self.tabs.setTabText(index, new_name)
+        self.tab_lists[new_name] = self.tab_lists.pop(old_name)
 
     def prev_tab(self):
         idx = self.tabs.currentIndex()
@@ -258,6 +286,7 @@ class PromptWindow(QWidget):
         old_text = self.prompt_dict.get(group, {}).get(old_alias, "")
 
         dlg = QDialog(self)
+        dlg.setFont(self.font())
         dlg.setWindowTitle("编辑 Prompt")
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.setSpacing(8)
@@ -277,10 +306,16 @@ class PromptWindow(QWidget):
         btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
         ok_button = btn_box.button(QDialogButtonBox.StandardButton.Ok)
         ok_button.setText("保存")
-        delete_btn = QPushButton("删除提示")
+        delete_btn = QPushButton("删除")
         delete_btn.setFont(self.font())
         delete_btn.clicked.connect(lambda: self._delete_prompt(group, old_alias, item, dlg))
-        delete_btn.setFixedSize(ok_button.sizeHint())
+        # 统一“保存”与“删除提示”按钮尺寸
+        ok_size = ok_button.sizeHint()
+        del_size = delete_btn.sizeHint()
+        btn_w = max(ok_size.width(), del_size.width())
+        btn_h = ok_size.height()
+        ok_button.setFixedSize(btn_w, btn_h)
+        delete_btn.setFixedSize(btn_w, btn_h)
         btn_layout = QHBoxLayout()
         btn_layout.addWidget(btn_box)
         btn_layout.addWidget(delete_btn)
@@ -389,6 +424,14 @@ class PromptWindow(QWidget):
             QTimer.singleShot(0, self.hide)
 
     def eventFilter(self, obj, event):
+        # 支持双击标签页重命名
+        if event.type() == QEvent.Type.MouseButtonDblClick and obj == self.tabs.tabBar():
+            mouse_event = event  # QMouseEvent
+            idx = obj.tabAt(mouse_event.pos())
+            if idx >= 0:
+                self.rename_group(idx)
+            return True
+
         # 支持按 Ctrl+C 复制选中 prompt 文本并计数
         if event.type() == QEvent.Type.KeyPress and obj in self.tab_lists.values():
             if (event.key() == Qt.Key.Key_C 
@@ -420,6 +463,7 @@ class PromptWindow(QWidget):
     def _new_prompt(self, group: str):
         # 使用自定义对话框支持多行输入
         dlg = QDialog(self)
+        dlg.setFont(self.font())
         dlg.setWindowTitle("新建 Prompt")
         dlg_layout = QVBoxLayout(dlg)
         dlg_layout.addWidget(QLabel("别名:"))
@@ -438,6 +482,8 @@ class PromptWindow(QWidget):
         ok_btn = btn_box.button(QDialogButtonBox.StandardButton.Ok)
         ok_btn.setText("保存")
         ok_btn.clicked.connect(lambda: self._confirm_new_prompt(group, dlg, inp_alias, editor))
+        cancel_btn = btn_box.button(QDialogButtonBox.StandardButton.Cancel)
+        cancel_btn.setText("取消")
         btn_box.rejected.connect(dlg.reject)
         dlg.exec()
 

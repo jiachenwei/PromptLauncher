@@ -3,9 +3,11 @@ import os, sys, keyboard, json
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QTimer
+from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from gui import PromptWindow
 from tray import create_tray
 from hotkey_dialog import get_custom_hotkey
+import ctypes  # 用于 Win32 互斥量
 
 # 运行时资源目录：打包后放在 exe 同目录，否则用脚本目录
 if getattr(sys, "frozen", False):
@@ -31,10 +33,31 @@ def _save_config(cfg: dict):
     except Exception:
         pass
 
+_instance_key = 'PromptLauncherSingleton'
+# Win32 互斥量，判断是否为首个实例
+mutex = ctypes.windll.kernel32.CreateMutexW(None, False, _instance_key)
+is_primary = ctypes.windll.kernel32.GetLastError() != 183
+_server_name = _instance_key + '_IPC'
+if not is_primary:
+    # 非主实例，通过本地 socket 通知主实例唤醒
+    sock = QLocalSocket()
+    sock.connectToServer(_server_name)
+    if sock.waitForConnected(500):
+        sock.write(b'activate')
+        sock.flush()
+        sock.disconnectFromServer()
+    sys.exit(0)
+
 app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
 # 设置全局应用图标
 app.setWindowIcon(QIcon(icon_file))
+if is_primary:
+    # 主实例监听唤醒信号
+    QLocalServer.removeServer(_server_name)
+    _server = QLocalServer()
+    _server.listen(_server_name)
+    _server.newConnection.connect(lambda: window.show_window())
 
 window = PromptWindow()
 
