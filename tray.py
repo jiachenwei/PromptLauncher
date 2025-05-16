@@ -4,8 +4,7 @@ from PyQt6.QtGui import QIcon
 
 def create_tray(app, show_cb, hotkey="Ctrl+Alt+P", custom_cb=None):
     # 兼容打包后临时目录
-    base = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
-    icon_file = os.path.join(base, "icon.png")
+    icon_file = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png")
     tray = QSystemTrayIcon(QIcon(icon_file), app)
     if not QSystemTrayIcon.isSystemTrayAvailable():
         print("System tray not available")

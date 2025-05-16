@@ -7,11 +7,14 @@ from gui import PromptWindow
 from tray import create_tray
 from hotkey_dialog import get_custom_hotkey
 
-# 配置文件路径
-CONFIG_PATH = os.path.join(os.path.dirname(__file__), ".config")
+# 运行时资源目录：打包后放在 exe 同目录，否则用脚本目录
+if getattr(sys, "frozen", False):
+    base = os.path.dirname(sys.executable)
+else:
+    base = os.path.dirname(__file__)
 
-# 资源基准目录
-base = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
+# 配置文件路径（.config）和 prompt.json 都放在 exe 同目录
+CONFIG_PATH = os.path.join(base, ".config")
 icon_file = os.path.join(base, "icon.png")
 
 def _load_config() -> dict:

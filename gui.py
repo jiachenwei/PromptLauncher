@@ -13,15 +13,20 @@ class PromptWindow(QWidget):
     def __init__(self, data_path: str = "prompt.json"):
         super().__init__()
 
-        # PyInstaller 解包后资源目录
-        base = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
+        # 运行时资源目录：打包后放在 exe 同目录，否则用当前脚本目录
+        if getattr(sys, "frozen", False):
+            # PyInstaller 打包后，sys.executable 指向 exe
+            base = os.path.dirname(sys.executable)
+        else:
+            # 开发环境下用脚本目录
+            base = os.path.dirname(__file__)
         # 如果 data_path 是相对路径，就放到同目录下
         if not os.path.isabs(data_path):
             self.data_path = os.path.join(base, data_path)
         else:
             self.data_path = data_path
-
-        icon_file = os.path.join(base, "icon.png")
+        
+        icon_file = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png")
         # 设置窗口左上角图标
         self.setWindowIcon(QIcon(icon_file))
 
@@ -429,15 +434,26 @@ class PromptWindow(QWidget):
             QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
         )
         dlg_layout.addWidget(btn_box)
-        btn_box.accepted.connect(dlg.accept)
+        # 拦截 OK 点击，先校验再决定是否关闭对话框
+        ok_btn = btn_box.button(QDialogButtonBox.StandardButton.Ok)
+        ok_btn.setText("保存")
+        ok_btn.clicked.connect(lambda: self._confirm_new_prompt(group, dlg, inp_alias, editor))
         btn_box.rejected.connect(dlg.reject)
-        if dlg.exec() == QDialog.DialogCode.Accepted:
-            alias = inp_alias.text().strip()
-            text = editor.toPlainText().strip()
-            if not alias or alias in self.prompt_dict.get(group, {}):
-                return
-            self.prompt_dict.setdefault(group, {})[alias] = text
-            self.usage_counts.setdefault(group, {})[alias] = 0
-            lst = self.tab_lists[group]
-            self._add_prompt_item(lst, alias, text, 0)
-            self._save()
+        dlg.exec()
+
+    def _confirm_new_prompt(self, group: str, dlg: QDialog, inp_alias: QLineEdit, editor: QTextEdit):
+        alias = inp_alias.text().strip()
+        text = editor.toPlainText().strip()
+        if not alias:
+            QMessageBox.warning(dlg, "新建 Prompt", "别名不能为空")
+            return
+        if alias in self.prompt_dict.get(group, {}):
+            QMessageBox.warning(dlg, "新建 Prompt", f"别名“{alias}”已存在")
+            return
+        # 添加新的 prompt 并保存
+        self.prompt_dict.setdefault(group, {})[alias] = text
+        self.usage_counts.setdefault(group, {})[alias] = 0
+        lst = self.tab_lists[group]
+        self._add_prompt_item(lst, alias, text, 0)
+        self._save()
+        dlg.accept()
