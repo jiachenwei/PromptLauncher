@@ -1,0 +1,39 @@
+name: Build and Release EXE
+
+on:
+  push:
+    tags:
+      - 'v*'  # 只有打 tag 才会触发，例如 v1.0.0
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v3
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+
+    - name: Install dependencies
+      run: |
+        pip install pyinstaller
+        pip install -r requirements.txt
+
+    - name: Build with PyInstaller
+      run: |
+        pyinstaller PromptLauncher.spec
+
+    - name: Debug token permissions
+      run: |
+        curl -i -H "Authorization: token ${{ secrets.PERSONAL_TOKEN }}" https://api.github.com/user
+
+    - name: Upload .exe to GitHub Release
+      uses: softprops/action-gh-release@v1
+      with:
+        files: dist/*.exe
+      env:
+        GITHUB_TOKEN: ${{ secrets.PERSONAL_TOKEN }}
