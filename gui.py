@@ -12,10 +12,15 @@ from PyQt6.QtWidgets import (
 class PromptWindow(QWidget):
     def __init__(self, data_path: str = "prompt.json"):
         super().__init__()
-        self.data_path = data_path
 
         # PyInstaller 解包后资源目录
         base = getattr(sys, "_MEIPASS", os.path.dirname(__file__))
+        # 如果 data_path 是相对路径，就放到同目录下
+        if not os.path.isabs(data_path):
+            self.data_path = os.path.join(base, data_path)
+        else:
+            self.data_path = data_path
+
         icon_file = os.path.join(base, "icon.png")
         # 设置窗口左上角图标
         self.setWindowIcon(QIcon(icon_file))
@@ -306,7 +311,8 @@ class PromptWindow(QWidget):
             list_widget = self.tab_lists[group]
             list_widget.takeItem(list_widget.row(item))
             self._save()
-            dialog.accept()
+            # 改为 reject()，避免 edit_prompt 在 exec() 后继续保存已删除条目
+            dialog.reject()
 
     def filter_current_tab(self, keyword: str):
         lst = self.tab_lists[self.tabs.tabText(self.tabs.currentIndex())]
@@ -407,18 +413,31 @@ class PromptWindow(QWidget):
         menu.exec(lst.mapToGlobal(pos))
 
     def _new_prompt(self, group: str):
-        """弹出对话框输入别名和内容，并添加到指定分组"""
-        alias, ok = QInputDialog.getText(self, "新建 Prompt", "别名:")
-        alias = alias.strip()
-        if not ok or not alias or alias in self.prompt_dict.get(group, {}):
-            return
-        text, ok = QInputDialog.getMultiLineText(self, "新建 Prompt", "内容:")
-        if not ok:
-            return
-        # 更新数据
-        self.prompt_dict.setdefault(group, {})[alias] = text
-        self.usage_counts.setdefault(group, {})[alias] = 0
-        # 更新界面
-        lst = self.tab_lists[group]
-        self._add_prompt_item(lst, alias, text, 0)
-        self._save()
+        # 使用自定义对话框支持多行输入
+        dlg = QDialog(self)
+        dlg.setWindowTitle("新建 Prompt")
+        dlg_layout = QVBoxLayout(dlg)
+        dlg_layout.addWidget(QLabel("别名:"))
+        inp_alias = QLineEdit()
+        inp_alias.setFont(self.font())
+        dlg_layout.addWidget(inp_alias)
+        dlg_layout.addWidget(QLabel("内容:"))
+        editor = QTextEdit()
+        editor.setFont(self.font())
+        dlg_layout.addWidget(editor)
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
+        )
+        dlg_layout.addWidget(btn_box)
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            alias = inp_alias.text().strip()
+            text = editor.toPlainText().strip()
+            if not alias or alias in self.prompt_dict.get(group, {}):
+                return
+            self.prompt_dict.setdefault(group, {})[alias] = text
+            self.usage_counts.setdefault(group, {})[alias] = 0
+            lst = self.tab_lists[group]
+            self._add_prompt_item(lst, alias, text, 0)
+            self._save()
