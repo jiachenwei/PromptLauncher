@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 class PromptWindow(QWidget):
-    def __init__(self, data_path: str = "prompt.json"):
+    def __init__(self, cfg: dict, data_path: str = "prompt.json"):
         super().__init__()
 
         # 运行时资源目录：打包后放在 exe 同目录，否则用当前脚本目录
@@ -22,9 +22,11 @@ class PromptWindow(QWidget):
             base = os.path.dirname(__file__)
         # 如果 data_path 是相对路径，就放到同目录下
         if not os.path.isabs(data_path):
-            self.data_path = os.path.join(base, data_path)
+            self._data_path = os.path.join(base, data_path)
         else:
-            self.data_path = data_path
+            self._data_path = data_path
+        
+        self._cfg = cfg
         
         icon_file = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png")
         # 设置窗口左上角图标
@@ -32,13 +34,13 @@ class PromptWindow(QWidget):
 
         # —— 读取 prompt.json（含 text/count）或使用传入的 prompt_dict 初始化 —— 
         
-        if not os.path.exists(self.data_path):
+        if not os.path.exists(self._data_path):
             # 如果文件不存在，创建一个空的 JSON 文件
             empty_dict = {"default": {}}
-            with open(self.data_path, 'w', encoding='utf-8') as f:
+            with open(self._data_path, 'w', encoding='utf-8') as f:
                 json.dump(empty_dict, f, ensure_ascii=False, indent=2)
 
-        with open(self.data_path, 'r', encoding='utf-8') as f:
+        with open(self._data_path, 'r', encoding='utf-8') as f:
             data = json.load(f) or {}
         self.prompt_dict = {}
         self.usage_counts = {}
@@ -48,9 +50,6 @@ class PromptWindow(QWidget):
             for alias, val in amap.items():
                 self.prompt_dict[grp][alias] = val.get('text','')
                 self.usage_counts[grp][alias] = val.get('count', 0)
-
-        # 记忆窗口尺寸的配置文件路径（JSON）
-        self._cfg_path = os.path.join(os.path.dirname(self.data_path), ".config")
 
         # 窗口设置
         self.setWindowTitle("Prompt Launcher")
@@ -66,16 +65,9 @@ class PromptWindow(QWidget):
         self.setMinimumSize(400, 300)
 
         # 如果存在配置文件，恢复上次保存的尺寸
-        if os.path.exists(self._cfg_path):
-            try:
-                with open(self._cfg_path, 'r', encoding='utf-8') as f:
-                    cfg = json.load(f)
-                    w, h = cfg.get("width"), cfg.get("height")
-                    if isinstance(w, int) and isinstance(h, int):
-                        self.resize(w, h)
-            except Exception as e:
-                print(f"Error loading config: {e}")
-                pass
+        w, h = self._cfg.get("width"), self._cfg.get("height")
+        if isinstance(w, int) and isinstance(h, int):
+            self.resize(w, h)
 
         # 主布局
         layout = QVBoxLayout(self)
@@ -135,6 +127,13 @@ class PromptWindow(QWidget):
         bottom_layout.addWidget(btn_del)
         bottom_layout.addWidget(btn_prev)
         bottom_layout.addWidget(btn_next)
+        # 在左侧添加 SSH 备份设置按钮
+        btn_ssh = QPushButton("SSH 设置")
+        btn_ssh.setFont(self.font())
+        btn_ssh.setFixedSize(80, 30)
+        btn_ssh.clicked.connect(self.configure_ssh_backup)
+        bottom_layout.insertWidget(0, btn_ssh)
+
         layout.addWidget(bottom_widget)
 
     def _add_group_tab(self, group_name: str):
@@ -393,13 +392,8 @@ class PromptWindow(QWidget):
 
     def closeEvent(self, event):
         # 关闭时保存当前窗口尺寸
-        try:
-            size = {"width": self.width(), "height": self.height()}
-            with open(self._cfg_path, 'w', encoding='utf-8') as f:
-                json.dump(size, f, ensure_ascii=False, indent=2)
-        except Exception as e:
-            print(f"Error saving config: {e}")
-            pass
+        size = {"width": self.width(), "height": self.height()}
+        self._cfg.update(size)
         # 退出前再保存一次
         self._save()
         event.accept()
@@ -413,7 +407,7 @@ class PromptWindow(QWidget):
             for alias, text in amap.items():
                 cnt = self.usage_counts.get(grp, {}).get(alias, 0)
                 out[grp][alias] = {'text': text, 'count': cnt}
-        with open(self.data_path, 'w', encoding='utf-8') as f:
+        with open(self._data_path, 'w', encoding='utf-8') as f:
             json.dump(out, f, ensure_ascii=False, indent=2)
 
     def changeEvent(self, event):
@@ -503,3 +497,38 @@ class PromptWindow(QWidget):
         self._add_prompt_item(lst, alias, text, 0)
         self._save()
         dlg.accept()
+
+    def configure_ssh_backup(self):
+        dlg = QDialog(self)
+        dlg.setFont(self.font())
+        dlg.setWindowTitle("SSH 备份设置")
+        dlg_layout = QVBoxLayout(dlg)
+        fields: dict[str, QLineEdit] = {}
+        # 先尝试从 .config 读取已有 ssh 配置
+        ssh_cfg = self._cfg.get("ssh", {})
+
+        for label_text, key, default in [
+            ("主机:", "host", ""),
+            ("端口:", "port", "22"),
+            ("用户名:", "user", ""),
+            ("远程路径:", "remote_path", ""),
+            ("私钥路径:", "key_path", "")
+        ]:
+            val = ssh_cfg.get(key, default)
+            dlg_layout.addWidget(QLabel(label_text))
+            line = QLineEdit(val)
+            line.setFont(self.font())
+            dlg_layout.addWidget(line)
+            fields[key] = line
+        btn_box = QDialogButtonBox(
+            QDialogButtonBox.StandardButton.Ok |
+            QDialogButtonBox.StandardButton.Cancel
+        )
+        dlg_layout.addWidget(btn_box)
+        btn_box.accepted.connect(dlg.accept)
+        btn_box.rejected.connect(dlg.reject)
+        if dlg.exec() == QDialog.DialogCode.Accepted:
+            # 读取原有 config，合并 ssh 字段
+            ssh_cfg = {k: v.text().strip() for k, v in fields.items()}
+            self._cfg.update({"ssh": ssh_cfg})
+            QMessageBox.information(self, "SSH 设置", "SSH 备份设置已保存")
