@@ -37,11 +37,12 @@ def create_tray(app, show_cb, hotkey="Ctrl+Alt+P", custom_cb=None):
         
         # 准备对话框
         dlg = QDialog()
+        dlg.setFont(app.font())
         # 设置窗口左上角图标
         dlg.setWindowIcon(QIcon(icon_path))
         dlg.setWindowTitle("关于 Prompt Launcher")
         dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
-        dlg.resize(320, 240)
+        dlg.setFixedSize(320, 240)  # 设置固定大小，避免用户调整窗口大小
 
         # 布局
         layout = QVBoxLayout(dlg)
@@ -94,11 +95,12 @@ def create_tray(app, show_cb, hotkey="Ctrl+Alt+P", custom_cb=None):
     tray.setToolTip("Prompt Launcher")
     tray.setVisible(True)
 
-    # 双击托盘图标恢复主窗口
+    # 双击或单击托盘图标恢复主窗口
     tray.activated.connect(
         lambda reason: show_cb()
-        if reason == QSystemTrayIcon.ActivationReason.DoubleClick
-        else None
+            if reason in (QSystemTrayIcon.ActivationReason.Trigger,
+                          QSystemTrayIcon.ActivationReason.DoubleClick)
+            else None
     )
 
     # 把 action 引用打包到 tray 里，便于外部更新文字

@@ -8,11 +8,22 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QPushButton, QHBoxLayout, QLabel,
     QDialog, QTextEdit, QDialogButtonBox, QInputDialog, QMessageBox, QMenu
 )
+from dialogs import SshConfigDialog
+from dialogs.new_prompt_dialog import NewPromptDialog
+from dialogs.edit_prompt_dialog import EditPromptDialog
+from widgets import PromptItemWidget
 
 class PromptWindow(QWidget):
     def __init__(self, cfg: dict, data_path: str = "prompt.json"):
         super().__init__()
+        self._cfg = cfg
+        self._init_paths(data_path)
+        self._load_data()
+        self._setup_ui()
+        self._connect_signals()
 
+    # region ——— 数据初始化与加载
+    def _init_paths(self, data_path: str):
         # 运行时资源目录：打包后放在 exe 同目录，否则用当前脚本目录
         if getattr(sys, "frozen", False):
             # PyInstaller 打包后，sys.executable 指向 exe
@@ -25,17 +36,10 @@ class PromptWindow(QWidget):
             self._data_path = os.path.join(base, data_path)
         else:
             self._data_path = data_path
-        
-        self._cfg = cfg
-        
-        icon_file = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png")
-        # 设置窗口左上角图标
-        self.setWindowIcon(QIcon(icon_file))
 
-        # —— 读取 prompt.json（含 text/count）或使用传入的 prompt_dict 初始化 —— 
-        
+    def _load_data(self):
+        # 如果文件不存在，创建一个空的 JSON 文件
         if not os.path.exists(self._data_path):
-            # 如果文件不存在，创建一个空的 JSON 文件
             empty_dict = {"default": {}}
             with open(self._data_path, 'w', encoding='utf-8') as f:
                 json.dump(empty_dict, f, ensure_ascii=False, indent=2)
@@ -50,6 +54,13 @@ class PromptWindow(QWidget):
             for alias, val in amap.items():
                 self.prompt_dict[grp][alias] = val.get('text','')
                 self.usage_counts[grp][alias] = val.get('count', 0)
+    # endregion
+
+    # region ——— UI 构建
+    def _setup_ui(self):
+        icon_file = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png")
+        # 设置窗口左上角图标
+        self.setWindowIcon(QIcon(icon_file))
 
         # 窗口设置
         self.setWindowTitle("Prompt Launcher")
@@ -80,7 +91,6 @@ class PromptWindow(QWidget):
         # 搜索框
         self.search = QLineEdit(placeholderText="搜索 prompt…")
         self.search.setFont(default_font)
-        self.search.textChanged.connect(self.filter_current_tab)
         self.search.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Fixed)
         self.search.setContentsMargins(0, 0, 0, 5)
         layout.addWidget(self.search)
@@ -94,15 +104,7 @@ class PromptWindow(QWidget):
         for name in list(self.prompt_dict.keys()):
             self._add_group_tab(name)
 
-        # 安装事件过滤，实现 Ctrl+C 复制
-        for lst in self.tab_lists.values():
-            lst.installEventFilter(self)
-
         layout.addWidget(self.tabs)
-
-        # 支持双击标签页重命名
-        tab_bar = self.tabs.tabBar()
-        tab_bar.installEventFilter(self)
 
         # 底部按钮：新建、删除分组、上一页、下一页
         btn_new = QPushButton("＋")
@@ -127,14 +129,29 @@ class PromptWindow(QWidget):
         bottom_layout.addWidget(btn_del)
         bottom_layout.addWidget(btn_prev)
         bottom_layout.addWidget(btn_next)
-        # 在左侧添加 SSH 备份设置按钮
-        btn_ssh = QPushButton("SSH 设置")
-        btn_ssh.setFont(self.font())
-        btn_ssh.setFixedSize(80, 30)
-        btn_ssh.clicked.connect(self.configure_ssh_backup)
-        bottom_layout.insertWidget(0, btn_ssh)
+        # 同步状态显示
+        self.sync_label = QLabel("上次同步: -")
+        self.sync_label.setFont(self.font())
+        # 点击同步状态弹出 SSH 设置对话框
+        self.sync_label.setCursor(Qt.CursorShape.PointingHandCursor)
+        self.sync_label.mousePressEvent = lambda ev: self.configure_ssh_backup()
+        bottom_layout.insertWidget(0, self.sync_label)
 
         layout.addWidget(bottom_widget)
+    # endregion
+
+    # region ——— 信号绑定
+    def _connect_signals(self):
+        self.search.textChanged.connect(self.filter_current_tab)
+
+        # 安装事件过滤，实现 Ctrl+C 复制
+        for lst in self.tab_lists.values():
+            lst.installEventFilter(self)
+
+        # 支持双击标签页重命名
+        tab_bar = self.tabs.tabBar()
+        tab_bar.installEventFilter(self)
+    # endregion
 
     def _add_group_tab(self, group_name: str):
         alias_map = self.prompt_dict.get(group_name, {})
@@ -157,31 +174,7 @@ class PromptWindow(QWidget):
 
     def _add_prompt_item(self, lst: QListWidget, alias: str, prompt_text: str, count: int):
         item = QListWidgetItem()
-        widget = QWidget()
-        vbox = QVBoxLayout(widget)
-        vbox.setContentsMargins(8, 4, 8, 4)
-        vbox.setSpacing(2)
-
-        alias_label = QLabel(alias)
-        alias_font = QFont(self.font())
-        # alias_font.setBold(True)
-        alias_label.setFont(alias_font)
-
-        # 名称和计数水平布局，计数靠右
-        hbox = QHBoxLayout()
-        hbox.setContentsMargins(0, 0, 0, 0)
-        hbox.addWidget(alias_label)
-        hbox.addStretch()
-        cnt_label = QLabel(str(count))
-        cnt_label.setFont(self.font())
-        cnt_label.setAlignment(Qt.AlignmentFlag.AlignRight)
-        # 标记一下，方便后面查找
-        cnt_label.setObjectName(f"cnt_{alias}")
-        hbox.addWidget(cnt_label)
-        vbox.addLayout(hbox)
-
-        # 固定高度（包含计数行）
-        widget.setFixedHeight(widget.sizeHint().height())
+        widget = PromptItemWidget(alias, count, self.font())
         item.setSizeHint(widget.sizeHint())
         lst.addItem(item)
         lst.setItemWidget(item, widget)
@@ -262,11 +255,14 @@ class PromptWindow(QWidget):
             self.tabs.setCurrentIndex(idx + 1)
 
     def show_window(self):
-        # 从托盘或热键唤起时恢复窗口并置顶
-        self.showNormal()
+        # 恢复窗口并激活到前台
+        if self.isMinimized() or not self.isVisible():
+            self.showNormal()
+        # 确保窗口处于活动状态
+        self.setWindowState(Qt.WindowState.WindowActive)
         self.raise_()
         self.activateWindow()
-        self.show()
+        self.setFocus()
 
     def toggle_window(self):
         """Ctrl+Alt+P 调用，隐藏或显示主窗口"""
@@ -278,64 +274,27 @@ class PromptWindow(QWidget):
     def edit_prompt(self, item: QListWidgetItem):
         group = self.tabs.tabText(self.tabs.currentIndex())
         widget = self.tab_lists[group].itemWidget(item)
-        # 只取第一个 QLabel（alias_label）
         alias_label = widget.findChild(QLabel)
         old_alias = alias_label.text()
-        # 从数据字典获取原始 prompt 文本
         old_text = self.prompt_dict.get(group, {}).get(old_alias, "")
 
-        dlg = QDialog(self)
-        dlg.setFont(self.font())
-        dlg.setWindowTitle("编辑 Prompt")
-        dlg_layout = QVBoxLayout(dlg)
-        dlg_layout.setSpacing(8)
-
-        dlg_layout.addWidget(QLabel("别名:"))
-        inp_alias = QLineEdit(old_alias)
-        inp_alias.setFont(self.font())
-        dlg_layout.addWidget(inp_alias)
-
-        dlg_layout.addWidget(QLabel("内容:"))
-        editor = QTextEdit()
-        editor.setFont(self.font())
-        editor.setPlainText(old_text)
-        dlg_layout.addWidget(editor)
-
-        # 按钮布局
-        btn_box = QDialogButtonBox(QDialogButtonBox.StandardButton.Ok)
-        ok_button = btn_box.button(QDialogButtonBox.StandardButton.Ok)
-        ok_button.setText("保存")
-        delete_btn = QPushButton("删除")
-        delete_btn.setFont(self.font())
-        delete_btn.clicked.connect(lambda: self._delete_prompt(group, old_alias, item, dlg))
-        # 统一“保存”与“删除提示”按钮尺寸
-        ok_size = ok_button.sizeHint()
-        del_size = delete_btn.sizeHint()
-        btn_w = max(ok_size.width(), del_size.width())
-        btn_h = ok_size.height()
-        ok_button.setFixedSize(btn_w, btn_h)
-        delete_btn.setFixedSize(btn_w, btn_h)
-        btn_layout = QHBoxLayout()
-        btn_layout.addWidget(btn_box)
-        btn_layout.addWidget(delete_btn)
-        dlg_layout.addLayout(btn_layout)
-        btn_box.accepted.connect(dlg.accept)
-
+        dlg = EditPromptDialog(self, old_alias, old_text)
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            new_alias = inp_alias.text().strip()
-            new_text = editor.toPlainText().strip()
-            # 更新数据字典
-            if new_alias != old_alias:
-                self.prompt_dict[group].pop(old_alias, None)
-                self.usage_counts[group].pop(old_alias, None)
-            self.prompt_dict[group][new_alias] = new_text
-            self.usage_counts[group][new_alias] = self.usage_counts[group].get(new_alias, 0)
-            # 更新界面上的别名
-            alias_label.setText(new_alias)
-            # 调整列表项高度
-            widget.setFixedHeight(widget.sizeHint().height())
-            item.setSizeHint(widget.sizeHint())
-            self._save()
+            action, new_alias, new_text = dlg.get_result()
+            if action == "delete":
+                self._delete_prompt(group, old_alias, item, dlg)
+            elif action == "save":
+                # 更新数据字典
+                if new_alias != old_alias:
+                    self.prompt_dict[group].pop(old_alias, None)
+                    self.usage_counts[group].pop(old_alias, None)
+                self.prompt_dict[group][new_alias] = new_text
+                self.usage_counts[group][new_alias] = self.usage_counts[group].get(new_alias, 0)
+                # 更新界面
+                alias_label.setText(new_alias)
+                widget.setFixedHeight(widget.sizeHint().height())
+                item.setSizeHint(widget.sizeHint())
+                self._save()
 
     def _delete_prompt(self, group: str, alias: str, item: QListWidgetItem, dialog: QDialog):
         resp = QMessageBox.question(
@@ -379,16 +338,14 @@ class PromptWindow(QWidget):
         self._save()
         # 界面上同步更新对应 count 标签
         lst = self.tab_lists.get(group)
-        if lst:
-            for i in range(lst.count()):
-                item = lst.item(i)
-                widget = lst.itemWidget(item)
-                alias_label = widget.findChild(QLabel)
-                if alias_label and alias_label.text() == alias:
-                    cnt_label = widget.findChild(QLabel, f"cnt_{alias}")
-                    if cnt_label:
-                        cnt_label.setText(str(self.usage_counts[group][alias]))
-                    break
+        if not lst:
+            return
+        for i in range(lst.count()):
+            item = lst.item(i)
+            widget: PromptItemWidget = lst.itemWidget(item)
+            if widget.alias_label.text() == alias:
+                widget.set_count(self.usage_counts[group][alias])
+                break
 
     def closeEvent(self, event):
         # 关闭时保存当前窗口尺寸
@@ -455,80 +412,36 @@ class PromptWindow(QWidget):
         menu.exec(lst.mapToGlobal(pos))
 
     def _new_prompt(self, group: str):
-        # 使用自定义对话框支持多行输入
-        dlg = QDialog(self)
-        dlg.setFont(self.font())
-        dlg.setWindowTitle("新建 Prompt")
-        dlg_layout = QVBoxLayout(dlg)
-        dlg_layout.addWidget(QLabel("别名:"))
-        inp_alias = QLineEdit()
-        inp_alias.setFont(self.font())
-        dlg_layout.addWidget(inp_alias)
-        dlg_layout.addWidget(QLabel("内容:"))
-        editor = QTextEdit()
-        editor.setFont(self.font())
-        dlg_layout.addWidget(editor)
-        btn_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok | QDialogButtonBox.StandardButton.Cancel
-        )
-        dlg_layout.addWidget(btn_box)
-        # 拦截 OK 点击，先校验再决定是否关闭对话框
-        ok_btn = btn_box.button(QDialogButtonBox.StandardButton.Ok)
-        ok_btn.setText("保存")
-        ok_btn.clicked.connect(lambda: self._confirm_new_prompt(group, dlg, inp_alias, editor))
-        cancel_btn = btn_box.button(QDialogButtonBox.StandardButton.Cancel)
-        cancel_btn.setText("取消")
-        btn_box.rejected.connect(dlg.reject)
-        dlg.exec()
-
-    def _confirm_new_prompt(self, group: str, dlg: QDialog, inp_alias: QLineEdit, editor: QTextEdit):
-        alias = inp_alias.text().strip()
-        text = editor.toPlainText().strip()
-        if not alias:
-            QMessageBox.warning(dlg, "新建 Prompt", "别名不能为空")
-            return
-        if alias in self.prompt_dict.get(group, {}):
-            QMessageBox.warning(dlg, "新建 Prompt", f"别名“{alias}”已存在")
-            return
-        # 添加新的 prompt 并保存
-        self.prompt_dict.setdefault(group, {})[alias] = text
-        self.usage_counts.setdefault(group, {})[alias] = 0
-        lst = self.tab_lists[group]
-        self._add_prompt_item(lst, alias, text, 0)
-        self._save()
-        dlg.accept()
+        # 循环弹窗，直到有效输入或取消
+        while True:
+            dlg = NewPromptDialog(self)
+            if dlg.exec() != QDialog.DialogCode.Accepted:
+                return
+            alias, content = dlg.get_prompt_data()
+            alias = alias.strip()
+            # 校验别名
+            if not alias:
+                QMessageBox.warning(self, "新建 Prompt", "别名不能为空")
+                continue
+            if alias in self.prompt_dict.get(group, {}):
+                QMessageBox.warning(self, "新建 Prompt", f"别名“{alias}”已存在")
+                continue
+            # 添加新的 prompt 并保存
+            self.prompt_dict.setdefault(group, {})[alias] = content
+            self.usage_counts.setdefault(group, {})[alias] = 0
+            lst = self.tab_lists[group]
+            self._add_prompt_item(lst, alias, content, 0)
+            self._save()
+            break
 
     def configure_ssh_backup(self):
-        dlg = QDialog(self)
-        dlg.setFont(self.font())
-        dlg.setWindowTitle("SSH 备份设置")
-        dlg_layout = QVBoxLayout(dlg)
-        fields: dict[str, QLineEdit] = {}
-        # 先尝试从 .config 读取已有 ssh 配置
-        ssh_cfg = self._cfg.get("ssh", {})
-
-        for label_text, key, default in [
-            ("主机:", "host", ""),
-            ("端口:", "port", "22"),
-            ("用户名:", "user", ""),
-            ("远程路径:", "remote_path", ""),
-            ("私钥路径:", "key_path", "")
-        ]:
-            val = ssh_cfg.get(key, default)
-            dlg_layout.addWidget(QLabel(label_text))
-            line = QLineEdit(val)
-            line.setFont(self.font())
-            dlg_layout.addWidget(line)
-            fields[key] = line
-        btn_box = QDialogButtonBox(
-            QDialogButtonBox.StandardButton.Ok |
-            QDialogButtonBox.StandardButton.Cancel
-        )
-        dlg_layout.addWidget(btn_box)
-        btn_box.accepted.connect(dlg.accept)
-        btn_box.rejected.connect(dlg.reject)
+        dlg = SshConfigDialog(self, self._cfg.get("ssh", {}))
         if dlg.exec() == QDialog.DialogCode.Accepted:
-            # 读取原有 config，合并 ssh 字段
-            ssh_cfg = {k: v.text().strip() for k, v in fields.items()}
-            self._cfg.update({"ssh": ssh_cfg})
+            self._cfg["ssh"] = dlg.get_config()
             QMessageBox.information(self, "SSH 设置", "SSH 备份设置已保存")
+
+    def update_sync_status(self, timestamp, success: bool):
+        """供 SshBackupManager 调用，更新同步状态标签"""
+        ts_str = timestamp.strftime("%Y-%m-%d %H:%M:%S")
+        result = "成功" if success else "失败"
+        self.sync_label.setText(f"上次同步: {ts_str} ({result})")

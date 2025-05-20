@@ -6,7 +6,8 @@ from PyQt6.QtCore import QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
 from gui import PromptWindow
 from tray import create_tray
-from hotkey_dialog import get_custom_hotkey
+from hotkey import get_custom_hotkey
+from ssh_backup import SshBackupManager
 
 BASE = getattr(sys, "frozen", False) and os.path.dirname(sys.executable) or os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(BASE, ".config")
@@ -41,7 +42,7 @@ class ConfigManager:
     def hotkey(self, seq):
         self.cfg["hotkey"] = seq.lower()
 
-def init_single_instance(key: str) -> bool:
+def init_single_instance(key: str):
     mutex = ctypes.windll.kernel32.CreateMutexW(None, False, key)
     is_primary = ctypes.windll.kernel32.GetLastError() != 183
     if not is_primary:
@@ -54,7 +55,7 @@ def init_single_instance(key: str) -> bool:
     QLocalServer.removeServer(key + '_IPC')
     server = QLocalServer()
     server.listen(key + '_IPC')
-    return True
+    return server
 
 class HotkeyManager:
     def __init__(self, cfg: ConfigManager, window: PromptWindow):
@@ -87,9 +88,15 @@ def main():
     cfg_mgr = ConfigManager(CONFIG_PATH)
     window  = PromptWindow(cfg_mgr.cfg, DATA_PATH)
 
-    init_single_instance(INSTANCE_KEY)
-    # 连接 IPC 唤醒
-    server = QLocalServer()
+    # 初始化定时 SSH 备份管理
+    ssh_cfg = cfg_mgr.cfg.get("ssh", {})
+    if ssh_cfg.get("host"):
+        # 把 window 传给备份管理，以便更新同步状态
+        backup_mgr = SshBackupManager(ssh_cfg, DATA_PATH, window)
+
+    # 单例检查并启动 IPC 服务，返回服务实例
+    server = init_single_instance(INSTANCE_KEY)
+    # 连接 IPC 唤醒（收到 activate 信号时显示主窗口）
     server.newConnection.connect(lambda: window.show_window())
 
     hot_mgr = HotkeyManager(cfg_mgr, window)
