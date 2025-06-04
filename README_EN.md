@@ -43,25 +43,25 @@ After building, the executable will be located in the `dist/PromptLauncher/` dir
 ## Project Structure
 ```plaintext
 PromptLauncher/
-├── gui.py                        # Main window logic
-├── main.py                       # Program entry point
-├── tray.py                       # System tray logic
-├── hotkey.py                     # Global hotkey management
-├── hotkey_dialog.py              # Custom hotkey dialog
-├── ssh_backup.py                 # SSH backup management
-├── prompt.json                   # Prompt data file
+├── promptlauncher/                # Core package
+│   ├── __init__.py
+│   ├── main.py                    # Program entry point
+│   ├── gui.py                     # Main window logic
+│   ├── tray.py                    # System tray logic
+│   ├── hotkey.py                  # Global hotkey management
+│   ├── ssh_backup.py              # SSH backup management
+│   ├── dialogs/                   # Dialog modules
+│   │   ├── new_prompt_dialog.py
+│   │   ├── edit_prompt_dialog.py
+│   │   ├── ssh_config_dialog.py
+│   │   └── custom_hotkey_dialog.py
+│   └── widgets/                   # Custom widgets
+│       └── prompt_item_widget.py
 ├── requirements.txt              # Dependency list
 ├── PromptLauncher.spec           # PyInstaller build config
 ├── icon.png                      # Application icon
 ├── README.md                     # Project documentation (Chinese)
-├── README_EN.md                  # Project documentation (English)
-├── dialogs/                      # Dialog modules
-│   ├── new_prompt_dialog.py      # Create prompt dialog
-│   ├── edit_prompt_dialog.py     # Edit prompt dialog
-│   ├── ssh_config_dialog.py      # SSH configuration dialog
-│   └── custom_hotkey_dialog.py   # Custom hotkey dialog
-└── widgets/                      # Custom widgets
-    └── prompt_item_widget.py     # Prompt list item widget
+└── README_EN.md                  # Project documentation (English)
 ```
 
 ## License

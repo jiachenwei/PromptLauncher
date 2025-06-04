@@ -8,10 +8,10 @@ from PyQt6.QtWidgets import (
     QSizePolicy, QPushButton, QHBoxLayout, QLabel,
     QDialog, QTextEdit, QDialogButtonBox, QInputDialog, QMessageBox, QMenu
 )
-from dialogs import SshConfigDialog
-from dialogs.new_prompt_dialog import NewPromptDialog
-from dialogs.edit_prompt_dialog import EditPromptDialog
-from widgets import PromptItemWidget
+from .dialogs import SshConfigDialog
+from .dialogs.new_prompt_dialog import NewPromptDialog
+from .dialogs.edit_prompt_dialog import EditPromptDialog
+from .widgets import PromptItemWidget
 
 class PromptWindow(QWidget):
     def __init__(self, cfg: dict, data_path: str = "prompt.json"):

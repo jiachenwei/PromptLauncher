@@ -2,7 +2,7 @@
 
 
 a = Analysis(
-    ['main.py'],
+    ['promptlauncher/main.py'],
     pathex=[],
     # 把 icon.png 打包进 exe 所在目录
     datas=[('icon.png', '.')],

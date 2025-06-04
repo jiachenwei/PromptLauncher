@@ -1,5 +1,5 @@
 from PyQt6.QtWidgets import QDialog
-from dialogs import CustomHotkeyDialog
+from .dialogs import CustomHotkeyDialog
 
 
 def get_custom_hotkey(parent=None) -> str | None:
