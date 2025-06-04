@@ -4,10 +4,10 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from gui import PromptWindow
-from tray import create_tray
-from hotkey import get_custom_hotkey
-from ssh_backup import SshBackupManager
+from .gui import PromptWindow
+from .tray import create_tray
+from .hotkey import get_custom_hotkey
+from .ssh_backup import SshBackupManager
 
 BASE = getattr(sys, "frozen", False) and os.path.dirname(sys.executable) or os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(BASE, ".config")

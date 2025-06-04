@@ -65,24 +65,24 @@ pyinstaller PromptLauncher.spec
 
 ```plaintext
 PromptLauncher/
-├── gui.py                        # 主窗口逻辑
-├── main.py                       # 程序入口
-├── tray.py                       # 托盘图标逻辑
-├── hotkey.py                     # 全局热键管理
-├── hotkey_dialog.py              # 自定义热键对话框
-├── ssh_backup.py                 # SSH 备份管理
-├── prompt.json                   # Prompt 数据文件
+├── promptlauncher/                # 核心代码包
+│   ├── __init__.py
+│   ├── main.py                    # 程序入口
+│   ├── gui.py                     # 主窗口逻辑
+│   ├── tray.py                    # 托盘图标逻辑
+│   ├── hotkey.py                  # 全局热键管理
+│   ├── ssh_backup.py              # SSH 备份管理
+│   ├── dialogs/                   # 对话框模块
+│   │   ├── new_prompt_dialog.py
+│   │   ├── edit_prompt_dialog.py
+│   │   ├── ssh_config_dialog.py
+│   │   └── custom_hotkey_dialog.py
+│   └── widgets/                   # 自定义控件模块
+│       └── prompt_item_widget.py
 ├── requirements.txt              # 依赖列表
 ├── PromptLauncher.spec           # PyInstaller 打包配置
 ├── icon.png                      # 应用图标
-├── README.md                     # 项目说明文档
-├── dialogs/                      # 对话框模块
-│   ├── new_prompt_dialog.py      # 新建 Prompt 对话框
-│   ├── edit_prompt_dialog.py     # 编辑 Prompt 对话框
-│   ├── ssh_config_dialog.py      # SSH 配置对话框
-│   └── custom_hotkey_dialog.py   # 自定义热键对话框
-└── widgets/                      # 自定义控件模块
-    └── prompt_item_widget.py     # Prompt 列表项 Widget
+└── README.md                     # 项目说明文档
 ```
 
 ## 许可证
