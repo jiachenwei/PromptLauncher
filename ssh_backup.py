@@ -56,6 +56,8 @@ class SshBackupManager:
             return  # 配置不全时跳过
         logger.debug(f"Connecting to {host}:{port} as {user}, remote_path={remote_path}")
         success = False
+        transport = None
+        sftp = None
         try:
             logger.debug(f"Loading private key from {key_path}")
             key = paramiko.RSAKey.from_private_key_file(key_path)
@@ -70,12 +72,20 @@ class SshBackupManager:
             logger.debug(f"Uploading {self.local_file} to {remote_file}")
             sftp.put(self.local_file, remote_file)
             logger.info("SSH backup successful")
-            sftp.close()
-            transport.close()
             success = True
         except Exception as e:
             logger.error(f"SSH backup error: {e}", exc_info=True)
         finally:
+            if sftp:
+                try:
+                    sftp.close()
+                except Exception:
+                    logger.debug("Error closing sftp", exc_info=True)
+            if transport:
+                try:
+                    transport.close()
+                except Exception:
+                    logger.debug("Error closing transport", exc_info=True)
             # 通知 GUI 同步状态
             if self.window:
                 self.window.update_sync_status(timestamp, success)
