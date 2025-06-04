@@ -1,4 +1,4 @@
-import os, sys, json
+import os, sys
 from PyQt6.QtCore import Qt, QEvent, QTimer
 from PyQt6.QtGui import QIcon, QFont
 from PyQt6.QtWidgets import (
@@ -12,13 +12,19 @@ from .dialogs import SshConfigDialog
 from .dialogs.new_prompt_dialog import NewPromptDialog
 from .dialogs.edit_prompt_dialog import EditPromptDialog
 from .widgets import PromptItemWidget
+from .model import PromptModel
+from .controller import PromptController
 
 class PromptWindow(QWidget):
     def __init__(self, cfg: dict, data_path: str = "prompt.json"):
         super().__init__()
         self._cfg = cfg
         self._init_paths(data_path)
-        self._load_data()
+        self.model = PromptModel(self._data_path)
+        self.controller = PromptController(self.model)
+        # Alias for convenience in existing code
+        self.prompt_dict = self.model.prompt_dict
+        self.usage_counts = self.model.usage_counts
         self._setup_ui()
         self._connect_signals()
 
@@ -37,23 +43,6 @@ class PromptWindow(QWidget):
         else:
             self._data_path = data_path
 
-    def _load_data(self):
-        # 如果文件不存在，创建一个空的 JSON 文件
-        if not os.path.exists(self._data_path):
-            empty_dict = {"default": {}}
-            with open(self._data_path, 'w', encoding='utf-8') as f:
-                json.dump(empty_dict, f, ensure_ascii=False, indent=2)
-
-        with open(self._data_path, 'r', encoding='utf-8') as f:
-            data = json.load(f) or {}
-        self.prompt_dict = {}
-        self.usage_counts = {}
-        for grp, amap in data.items():
-            self.prompt_dict[grp] = {}
-            self.usage_counts[grp] = {}
-            for alias, val in amap.items():
-                self.prompt_dict[grp][alias] = val.get('text','')
-                self.usage_counts[grp][alias] = val.get('count', 0)
     # endregion
 
     # region ——— UI 构建
@@ -194,9 +183,7 @@ class PromptWindow(QWidget):
                 continue
             break
         # 无重名，执行创建
-        self.prompt_dict[name] = {}
-        self.usage_counts[name] = {}
-        self._save()
+        self.controller.add_group(name)
         self._add_group_tab(name)
         self.tabs.setCurrentIndex(self.tabs.count() - 1)
 
@@ -212,9 +199,7 @@ class PromptWindow(QWidget):
             QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No
         )
         if resp == QMessageBox.StandardButton.Yes:
-            self.prompt_dict.pop(name, None)
-            self.usage_counts.pop(name, None)
-            self._save()
+            self.controller.delete_group(name)
             self.tabs.removeTab(idx)
             self.tab_lists.pop(name, None)
 
@@ -238,9 +223,7 @@ class PromptWindow(QWidget):
                 continue
             break
         # 无重名，执行重命名
-        self.prompt_dict[new_name] = self.prompt_dict.pop(old_name)
-        self.usage_counts[new_name] = self.usage_counts.pop(old_name)
-        self._save()
+        self.controller.rename_group(old_name, new_name)
         self.tabs.setTabText(index, new_name)
         self.tab_lists[new_name] = self.tab_lists.pop(old_name)
 
@@ -284,17 +267,12 @@ class PromptWindow(QWidget):
             if action == "delete":
                 self._delete_prompt(group, old_alias, item, dlg)
             elif action == "save":
-                # 更新数据字典
-                if new_alias != old_alias:
-                    self.prompt_dict[group].pop(old_alias, None)
-                    self.usage_counts[group].pop(old_alias, None)
-                self.prompt_dict[group][new_alias] = new_text
-                self.usage_counts[group][new_alias] = self.usage_counts[group].get(new_alias, 0)
+                # 更新数据
+                self.controller.update_prompt(group, old_alias, new_alias, new_text)
                 # 更新界面
                 alias_label.setText(new_alias)
                 widget.setFixedHeight(widget.sizeHint().height())
                 item.setSizeHint(widget.sizeHint())
-                self._save()
 
     def _delete_prompt(self, group: str, alias: str, item: QListWidgetItem, dialog: QDialog):
         resp = QMessageBox.question(
@@ -304,11 +282,9 @@ class PromptWindow(QWidget):
         )
         if resp == QMessageBox.StandardButton.Yes:
             # 删除数据及界面项
-            self.prompt_dict[group].pop(alias, None)
-            self.usage_counts[group].pop(alias, None)
+            self.controller.delete_prompt(group, alias)
             list_widget = self.tab_lists[group]
             list_widget.takeItem(list_widget.row(item))
-            self._save()
             # 改为 reject()，避免 edit_prompt 在 exec() 后继续保存已删除条目
             dialog.reject()
 
@@ -328,14 +304,13 @@ class PromptWindow(QWidget):
         if not item:
             return None
         alias = self.tab_lists[group].itemWidget(item).findChild(QLabel).text()
-        text = self.prompt_dict[group][alias]
+        text = self.controller.get_prompt_text(group, alias)
         # 每次取用时自增并保存
         self._increment_usage(group, alias)
         return text
 
     def _increment_usage(self, group: str, alias: str):
-        self.usage_counts[group][alias] += 1
-        self._save()
+        self.controller.increment_usage(group, alias)
         # 界面上同步更新对应 count 标签
         lst = self.tab_lists.get(group)
         if not lst:
@@ -352,20 +327,13 @@ class PromptWindow(QWidget):
         size = {"width": self.width(), "height": self.height()}
         self._cfg.update(size)
         # 退出前再保存一次
-        self._save()
+        self.controller.save()
         event.accept()
         QApplication.quit()
 
     def _save(self):
-        """把 prompt_dict + usage_counts 一起写回 prompt.json"""
-        out: dict[str, dict[str, dict[str, int|str]]] = {}
-        for grp, amap in self.prompt_dict.items():
-            out[grp] = {}
-            for alias, text in amap.items():
-                cnt = self.usage_counts.get(grp, {}).get(alias, 0)
-                out[grp][alias] = {'text': text, 'count': cnt}
-        with open(self._data_path, 'w', encoding='utf-8') as f:
-            json.dump(out, f, ensure_ascii=False, indent=2)
+        """Persist data via the controller."""
+        self.controller.save()
 
     def changeEvent(self, event):
         super().changeEvent(event)
@@ -391,7 +359,7 @@ class PromptWindow(QWidget):
                 item = obj.currentItem()
                 if item:
                     alias = obj.itemWidget(item).findChild(QLabel).text()
-                    text = self.prompt_dict[group][alias]
+                    text = self.controller.get_prompt_text(group, alias)
                     QApplication.clipboard().setText(text)
                     # 复制时计数并写回
                     self._increment_usage(group, alias)
@@ -400,7 +368,7 @@ class PromptWindow(QWidget):
 
     def insert_prompt(self, group: str, item: QListWidgetItem):
         alias = self.tab_lists[group].itemWidget(item).findChild(QLabel).text()
-        text = self.prompt_dict[group][alias]
+        text = self.controller.get_prompt_text(group, alias)
         # 复制到剪贴板并计数
         QApplication.clipboard().setText(text)
         self._increment_usage(group, alias)
@@ -427,11 +395,9 @@ class PromptWindow(QWidget):
                 QMessageBox.warning(self, "新建 Prompt", f"别名“{alias}”已存在")
                 continue
             # 添加新的 prompt 并保存
-            self.prompt_dict.setdefault(group, {})[alias] = content
-            self.usage_counts.setdefault(group, {})[alias] = 0
+            self.controller.add_prompt(group, alias, content)
             lst = self.tab_lists[group]
             self._add_prompt_item(lst, alias, content, 0)
-            self._save()
             break
 
     def configure_ssh_backup(self):
