@@ -1,5 +1,6 @@
 # main.py
 import os, sys, json, keyboard, ctypes
+import logging
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QTimer
@@ -8,6 +9,9 @@ from .gui import PromptWindow
 from .tray import create_tray
 from .hotkey import get_custom_hotkey
 from .ssh_backup import SshBackupManager
+from .logging_config import setup_logging
+
+logger = logging.getLogger(__name__)
 
 BASE = getattr(sys, "frozen", False) and os.path.dirname(sys.executable) or os.path.dirname(__file__)
 CONFIG_PATH = os.path.join(BASE, ".config")
@@ -104,6 +108,8 @@ class HotkeyManager:
         return new_seq
 
 def main():
+    setup_logging()
+    logger.info("PromptLauncher starting")
     app = QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(QIcon(ICON_FILE))
@@ -134,6 +140,7 @@ def main():
     window.show_window()
     ret = app.exec()
     cfg_mgr.save()
+    logger.info("PromptLauncher exiting")
     sys.exit(ret)
 
 def on_custom_wrapper(hot_mgr, tray, cfg_mgr):
