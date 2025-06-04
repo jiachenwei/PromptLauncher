@@ -1,21 +1,14 @@
 import os
 import paramiko
 import logging
+from .logging_config import setup_logging
 import posixpath
 import threading
 from PyQt6.QtCore import QTimer
 from datetime import datetime
 
-# 配置日志输出
 logger = logging.getLogger(__name__)
-logger.setLevel(logging.DEBUG)
-handler = logging.StreamHandler()
-formatter = logging.Formatter('[%(asctime)s] %(levelname)s:%(name)s: %(message)s')
-handler.setFormatter(formatter)
-logger.addHandler(handler)
-paramiko_logger = logging.getLogger('paramiko')
-paramiko_logger.setLevel(logging.DEBUG)
-paramiko_logger.addHandler(handler)
+setup_logging(logging.DEBUG)
 
 class SshBackupManager:
     """

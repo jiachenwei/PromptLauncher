@@ -1,10 +1,15 @@
 import os, sys
+import logging
+from .logging_config import setup_logging
 from PyQt6.QtWidgets import (
     QSystemTrayIcon, QMenu, QApplication,
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton, QLabel
 )
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtCore import Qt
+
+logger = logging.getLogger(__name__)
+setup_logging()
 
 def create_tray(app, show_cb, hotkey="Ctrl+Alt+P", custom_cb=None):
     """Create and return the system tray icon.
@@ -18,7 +23,7 @@ def create_tray(app, show_cb, hotkey="Ctrl+Alt+P", custom_cb=None):
     )
 
     if not QSystemTrayIcon.isSystemTrayAvailable():
-        print("System tray not available")
+        logger.warning("System tray not available")
         return None
 
     tray = QSystemTrayIcon(QIcon(icon_file), app)
