@@ -6,6 +6,8 @@ from .model import PromptModel
 from .controller import PromptController
 from .main import main
 
+__version__ = "1.1.0"
+
 __all__ = [
     "PromptWindow",
     "create_tray",
