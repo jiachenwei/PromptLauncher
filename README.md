@@ -8,6 +8,8 @@
   <img src="https://github.com/jiachenwei/PromptLauncher/actions/workflows/build.yml/badge.svg" alt="GitHub Actions 状态">
 </div>
 
+[English README](README_EN.md)
+
 **Prompt Launcher** 是一个基于 PyQt6 的桌面应用程序，用于管理和快速访问自定义的 Prompt。
 
 ## 功能特点
