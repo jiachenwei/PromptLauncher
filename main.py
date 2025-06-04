@@ -43,18 +43,41 @@ class ConfigManager:
         self.cfg["hotkey"] = seq.lower()
 
 def init_single_instance(key: str):
-    mutex = ctypes.windll.kernel32.CreateMutexW(None, False, key)
-    is_primary = ctypes.windll.kernel32.GetLastError() != 183
-    if not is_primary:
-        sock = QLocalSocket()
-        sock.connectToServer(key + '_IPC')
-        if sock.waitForConnected(500):
-            sock.write(b'activate'); sock.flush()
-        sys.exit(0)
-    # 主实例启动 IPC 服务
-    QLocalServer.removeServer(key + '_IPC')
+    """Ensure only one instance of the app runs.
+
+    On Windows we keep the previous mutex based approach. On other
+    platforms, ``QLocalServer`` itself is enough to detect another
+    running instance.  If another instance is found we notify it via
+    ``QLocalSocket`` and exit.
+    """
+
+    if os.name == "nt":
+        mutex = ctypes.windll.kernel32.CreateMutexW(None, False, key)
+        is_primary = ctypes.windll.kernel32.GetLastError() != 183
+        channel = key + "_IPC"
+        if not is_primary:
+            sock = QLocalSocket()
+            sock.connectToServer(channel)
+            if sock.waitForConnected(500):
+                sock.write(b"activate")
+                sock.flush()
+            sys.exit(0)
+        # Remove stale server and start listening
+        QLocalServer.removeServer(channel)
+        server = QLocalServer()
+        server.listen(channel)
+        return server
+
+    # Non-Windows: use QLocalServer alone
+    QLocalServer.removeServer(key)
     server = QLocalServer()
-    server.listen(key + '_IPC')
+    if not server.listen(key):
+        sock = QLocalSocket()
+        sock.connectToServer(key)
+        if sock.waitForConnected(500):
+            sock.write(b"activate")
+            sock.flush()
+        sys.exit(0)
     return server
 
 class HotkeyManager:
