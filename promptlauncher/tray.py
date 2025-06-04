@@ -10,7 +10,7 @@ from PyQt6.QtWidgets import (
 )
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtCore import Qt
-from . import __version__
+from .version import __version__
 
 
 def _parse_version(ver: str) -> tuple:
@@ -22,27 +22,43 @@ def _parse_version(ver: str) -> tuple:
 
 def check_update(parent=None):
     """Check GitHub releases and prompt to open the download page if newer."""
+    # 统一对话框图标路径
+    icon_path = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png")
     url = "https://api.github.com/repos/jiachenwei/PromptLauncher/releases/latest"
     try:
         with urllib.request.urlopen(url, timeout=5) as resp:
             data = json.load(resp)
         latest = data.get("tag_name", "")
         if latest and _parse_version(latest) > _parse_version(__version__):
-            ret = QMessageBox.question(
-                parent,
-                "检查更新",
-                f"发现新版本 {latest}，是否前往下载？",
-                QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            )
+            dlg = QMessageBox(parent)
+            dlg.setWindowTitle("检查更新")
+            dlg.setText(f"发现新版本 {latest}，是否前往下载？")
+            dlg.setIcon(QMessageBox.Icon.Question)
+            dlg.setStandardButtons(QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No)
+            dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            dlg.setWindowIcon(QIcon(icon_path))
+            ret = dlg.exec()
             if ret == QMessageBox.StandardButton.Yes:
-                webbrowser.open(
-                    "https://github.com/jiachenwei/PromptLauncher/releases/latest"
-                )
+                webbrowser.open("https://github.com/jiachenwei/PromptLauncher/releases/latest")
         else:
-            QMessageBox.information(parent, "检查更新", "当前已是最新版本")
+            dlg = QMessageBox(parent)
+            dlg.setWindowTitle("检查更新")
+            dlg.setText("当前已是最新版本")
+            dlg.setIcon(QMessageBox.Icon.Information)
+            dlg.setStandardButtons(QMessageBox.StandardButton.Ok)
+            dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+            dlg.setWindowIcon(QIcon(icon_path))
+            dlg.exec()
     except Exception as e:
         logger.error("update check failed", exc_info=True)
-        QMessageBox.warning(parent, "检查更新", f"检查更新失败: {e}")
+        dlg = QMessageBox(parent)
+        dlg.setWindowTitle("检查更新")
+        dlg.setText(f"检查更新失败: {e}")
+        dlg.setIcon(QMessageBox.Icon.Warning)
+        dlg.setStandardButtons(QMessageBox.StandardButton.Ok)
+        dlg.setWindowFlags(dlg.windowFlags() | Qt.WindowType.WindowStaysOnTopHint)
+        dlg.setWindowIcon(QIcon(icon_path))
+        dlg.exec()
 
 logger = logging.getLogger(__name__)
 setup_logging()

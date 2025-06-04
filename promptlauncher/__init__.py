@@ -5,8 +5,7 @@ from .ssh_backup import SshBackupManager
 from .model import PromptModel
 from .controller import PromptController
 from .main import main
-
-__version__ = "1.1.0"
+from .version import __version__
 
 __all__ = [
     "PromptWindow",
@@ -16,4 +15,5 @@ __all__ = [
     "PromptModel",
     "PromptController",
     "main",
+    "__version__",
 ]

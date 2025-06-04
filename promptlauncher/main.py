@@ -5,11 +5,11 @@ from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 from PyQt6.QtCore import QTimer
 from PyQt6.QtNetwork import QLocalServer, QLocalSocket
-from .gui import PromptWindow
-from .tray import create_tray
-from .hotkey import get_custom_hotkey
-from .ssh_backup import SshBackupManager
-from .logging_config import setup_logging
+from promptlauncher.gui import PromptWindow
+from promptlauncher.tray import create_tray
+from promptlauncher.hotkey import get_custom_hotkey
+from promptlauncher.ssh_backup import SshBackupManager
+from promptlauncher.logging_config import setup_logging
 
 logger = logging.getLogger(__name__)
 
