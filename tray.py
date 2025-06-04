@@ -7,12 +7,21 @@ from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtCore import Qt
 
 def create_tray(app, show_cb, hotkey="Ctrl+Alt+P", custom_cb=None):
+    """Create and return the system tray icon.
+
+    If the current platform does not support a system tray, ``None`` is
+    returned so callers can handle the absence of a tray icon gracefully.
+    """
     # 兼容打包后临时目录
-    icon_file = os.path.join(getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png")
-    tray = QSystemTrayIcon(QIcon(icon_file), app)
+    icon_file = os.path.join(
+        getattr(sys, "_MEIPASS", os.path.dirname(__file__)), "icon.png"
+    )
+
     if not QSystemTrayIcon.isSystemTrayAvailable():
         print("System tray not available")
-        return tray
+        return None
+
+    tray = QSystemTrayIcon(QIcon(icon_file), app)
 
     menu = QMenu()
 

@@ -123,8 +123,12 @@ def main():
     server.newConnection.connect(lambda: window.show_window())
 
     hot_mgr = HotkeyManager(cfg_mgr, window)
-    tray = create_tray(app, window.show_window, hot_mgr.cfg.hotkey.upper(), 
-                       lambda: on_custom_wrapper(hot_mgr, tray, cfg_mgr))
+    tray = create_tray(
+        app,
+        window.show_window,
+        hot_mgr.cfg.hotkey.upper(),
+        lambda: on_custom_wrapper(hot_mgr, tray, cfg_mgr),
+    )
     app.aboutToQuit.connect(cfg_mgr.save)
 
     window.show_window()
@@ -134,7 +138,7 @@ def main():
 
 def on_custom_wrapper(hot_mgr, tray, cfg_mgr):
     new_seq = hot_mgr.on_custom()
-    if new_seq:
+    if new_seq and tray:
         tray.hotkey_action.setText(f"热键: {new_seq.upper()}")
 
 if __name__ == "__main__":
